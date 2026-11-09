@@ -44,7 +44,7 @@ html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden
 @keyframes sweep{0%{left:-50%}60%,100%{left:130%}}
 @keyframes pop{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
 @keyframes glow{0%,100%{box-shadow:0 0 3px rgba(var(--rgb),.6),inset 0 0 5px rgba(var(--rgb),.35)}50%{box-shadow:0 0 8px rgba(var(--rgb),.95),inset 0 0 9px rgba(var(--rgb),.5)}}
-#d{display:none;position:absolute;left:0;top:100px;margin:0;color:#fff;font:11px/1.3 monospace;white-space:pre-wrap;max-width:440px}
+#d{display:none;position:fixed;left:8px;right:8px;bottom:8px;margin:0;color:#fff;font:12px/1.35 monospace;white-space:pre-wrap;word-break:break-all;z-index:9}
 </style>
 </head>
 <body>
@@ -65,7 +65,7 @@ const q = new URLSearchParams(location.search);
 const KEY = q.get('key') || q.get('streamKey') || '';
 const DEMO = q.get('demo') === '1' || !KEY;
 const PERIOD = ['all', 'year', 'month', 'week'].includes(q.get('period')) ? q.get('period') : 'all';
-const EVERY = Math.max(30, +q.get('refresh') || 60) * 1000;
+const EVERY = Math.max(60, +q.get('refresh') || 300) * 1000;
 const SCALE = +q.get('scale') || 0;
 const DBG = q.get('debug') === '1';
 const BASES = q.get('base') ? [q.get('base')] : ['https://backend.saweria.co/widgets/leaderboard/', 'https://api.saweria.co/widgets/leaderboard/'];
@@ -82,7 +82,7 @@ function fit() {
 }
 fit();
 addEventListener('resize', fit);
-if (DBG) { document.body.style.overflow = 'visible'; document.getElementById('d').style.display = 'block'; }
+if (DBG) { document.documentElement.style.background = '#1A1025'; document.body.style.overflow = 'visible'; document.getElementById('d').style.display = 'block'; }
 const dbg = (t) => { if (DBG) document.getElementById('d').textContent = t; };
 
 const pick = (o, ks) => { for (const k of ks) if (o && o[k] != null && o[k] !== '') return o[k]; };
@@ -129,7 +129,7 @@ function render(list, force) {
 }
 
 async function fetchLB() {
-  let info = '';
+  let info = '', rl = false;
   for (const B of BASES) {
     const u = B + PERIOD, h = B.split('/')[2] + ' ';
     const tries = [() => fetch(u + '?stream_key=' + encodeURIComponent(KEY)), () => fetch(u, { headers: { 'stream-key': KEY } })];
@@ -137,9 +137,11 @@ async function fetchLB() {
       try {
         const r = await t();
         info += h + 'HTTP ' + r.status + ' | ';
-        if (r.ok) return { j: await r.json(), info };
+        if (r.status === 429) { rl = true; info += 'RATE-LIMITED | '; break; }
+        if (r.ok) { const j = await r.json(); if (j && j.status === 'rate_limited') { rl = true; info += 'RATE-LIMITED | '; break; } return { j, info }; }
       } catch (e) { info += h + (e.message || e) + ' | '; }
     }
+    if (rl) break;
   }
   throw new Error(info);
 }
